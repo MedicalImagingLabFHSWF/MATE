@@ -1,8 +1,8 @@
-% 0 = Normaler Ablauf, 1 = skippe alle abfragen (immer als neu machen)
-auto = 1;
-
-% Daten verarbeiten und Netzwerk trainieren
-Main(auto)
-
-% Testdaten generieren und KI testen
-testMain(auto)
+1| % 0 = Normal process, 1 = skip all prompts (always do as new)
+2| auto = 1;
+3| 
+4| % Process data and train the network
+5| Main(auto)
+6| 
+7| % Generate test data and test the AI
+8| testMain(auto)

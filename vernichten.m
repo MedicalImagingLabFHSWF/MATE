@@ -2,37 +2,34 @@ function vernichten(pattern)
 d = dir(pattern);
 
 for i = 1:numel(d)
-    %erstellt den vollständigen Pfad 
-    pfad = fullfile(d(i).folder, d(i).name); 
-    % ignoriert . und ..   sind nicht sichtbar, tauchen aber auf
-    if strcmp(d(i).name,'.')||strcmp(d(i).name,'..')
+    % Creates the full path
+    path = fullfile(d(i).folder, d(i).name); 
+    % Ignores . and .. (not visible but can appear)
+    if strcmp(d(i).name, '.') || strcmp(d(i).name, '..')
         continue;
     end
-    % 7 ist die rückgabe die zeigt das bei exist ein Ordner gefunden wurde.
-    % damit wird überprüft ob der Pfad in der Variable pfad sich befindet.
+    % 7 is the return value indicating that a folder was found by `exist`.
+    % This checks if the path in the variable `path` exists.
     if d(i).isdir
-        if exist(pfad,'dir') == 7
+        if exist(path, 'dir') == 7
 
-            % versucht den ordner zu löschen, rekusiv (Funktioniert nur
-            %  bei Verzeichnissen)
+            % Attempts to delete the folder recursively (works only for directories)
             try
-                rmdir(pfad,'s');
-            % Falls ein Fehler passiert, wird dieser abgefangen, damit das
-            % Script nicht abstürzt
-            % Me beinhaltet die Fehlerinformation 
+                rmdir(path, 's');
+            % If an error occurs, it is caught to prevent the script from crashing
+            % `ME` contains error information
             catch ME
-                fprintf('Fehler bei "%s": %s\n',pfad, ME.message);
+                fprintf('Error at "%s": %s\n', path, ME.message);
             end
         else
-            fprintf('"%s" ist kein gueltiges Verzeichnis. \n', pfad);
+            fprintf('"%s" is not a valid directory.\n', path);
         end
     else 
         try 
-            % Falls kein Ordner, dann Datei die gelöscht
-            % wird.(Funktioniert nur bei Datein)
-            delete(pfad);
+            % If not a folder, then deletes the file (works only for files)
+            delete(path);
         catch ME
-            fprintf('Fehler: "%s": %s\n',pfad, ME.message);
+            fprintf('Error at "%s": %s\n', path, ME.message);
         end
     end
 end

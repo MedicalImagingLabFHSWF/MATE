@@ -1,71 +1,66 @@
 function Main(auto)
-% Matlab Datein müssen in einem Ordner Namens 'Mess' auf dem Desktop liegen
-
+% Matlab files must be located in a folder called 'Mess' on the desktop
 
     clc;
-    fprintf('Training gestartet\n');
-    % für Unterprogramme wichtig
-    modus ='training';
+    fprintf('Training started\n');
+    % Important for subprograms
+    mode = 'training';
     
-    % Schaut ob ein anderes skript mit auto vorgibt, damit läuft alles durch.
-    % oder ob man analoge alles steuert.
+    % Checks whether another script specifies 'auto', in which case everything runs automatically.
+    % Or if everything is controlled manually.
     if auto == 1
-        antwort = auto;
+        response = auto;
     else
-        antwort = input('Alles neu (1) oder fortsetzen (0)?\n');
+        response = input('Start fresh (1) or continue (0)?\n');
     end
     
-    % Bei nicht eingabe wird Fortgestzt (Enter,Leertaste)
-    if isempty(antwort)
-        antwort = 0;
+    % If there is no input, it will continue (Enter, Space)
+    if isempty(response)
+        response = 0;
     end
     
-    if antwort == 1
-        fprintf(' Lösche alles...\n');
+    if response == 1
+        fprintf('Deleting everything...\n');
     
-       % Function löscht lokal die Ordner
-       vernichten(fullfile('Mess','testing_data_pics'));
-       vernichten(fullfile('Mess','training_data_pics'));
+       % Function deletes local folders
+       destroy(fullfile('Mess','testing_data_pics'));
+       destroy(fullfile('Mess','training_data_pics'));
     
-       % Löscht Checkpoints, falls vorhanden
-       if isfolder('myChekpoints')
-           delete(fullfilfe('myChekpoints','*.mat'));
+       % Deletes checkpoints, if present
+       if isfolder('myCheckpoints')
+           delete(fullfile('myCheckpoints','*.mat'));
        end
-       % Löscht das Trainierte Model, falls vorhanden
+       % Deletes the trained model, if present
        if exist('trainedTemperatureModel.mat','file')
-           delte('trainedTemperatureModel.mat');
-    
+           delete('trainedTemperatureModel.mat');
        end
-       fprintf('Alles gelöscht\n');
+       fprintf('Everything deleted\n');
     
     else
-        fprintf('Fortsetzen\n');
+        fprintf('Continuing\n');
     
     end
     
-    % Ausführen der Skripte 
+    % Executes the scripts
     if exist('videoNadelErzeugen.m','file')
-        fprintf('Starte VideoNadelErzeugen\n');
-        videoNadelErzeugen(modus);
+        fprintf('Starting videoNadelErzeugen\n');
+        videoNadelErzeugen(mode);
     else
-        fprintf('Fehler, VideoNadelErzeugen nicht gefunden\n');
+        fprintf('Error, videoNadelErzeugen not found\n');
     end
-    
     
     if exist('nadelAugmentieren.m','file')
-        fprintf('Starte nadelAugemntieren\n');
+        fprintf('Starting nadelAugmentieren\n');
         nadelAugmentieren;
     else
-        fprintf('Fehler, nadelAugmentieren nicht gefunden\n')
+        fprintf('Error, nadelAugmentieren not found\n')
     end
     if exist('netTrainieren.m','file')
-        fprintf('Starte netTrainieren\n');
+        fprintf('Starting netTrainieren\n');
         netTrainieren(auto)
     else
-        fprintf('Fehler, netTrainieren nicht gefunden\n');
+        fprintf('Error, netTrainieren not found\n');
     end
     
-    fprintf('Main beendet\n');
+    fprintf('Main finished\n');
 end
-    
-

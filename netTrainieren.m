@@ -1,201 +1,201 @@
 function netTrainieren (auto)
-% Training mit ResNet-18!
-% Läd Daten
-% Liest aus den Dateinamen die Temperatur aus
-% Trainiert ein ResNet-18 
+% Training with ResNet-18!
+% Loads data
+% Reads the temperature from the filenames
+% Trains a ResNet-18
 
     clc;
-    fprintf('Netzwerk trainieren ...\n');
+    fprintf('Training network ...\n');
 
-    % Wenn man 1 übergibt wird immer alles neu gemacht ohne fragen
+    % If 1 is passed, everything will always be redone without asking
     if auto == 1
-    antwort = auto;
+        response = auto;
     else
-        antwort = input('Alles neu (1) oder fortsetzen (0)? ');
+        response = input('Start fresh (1) or continue (0)? ');
     end
 
-    if isempty(antwort)
-        antwort=0;
+    if isempty(response)
+        response = 0;
     end
 
-    % Alles neu, also Checkpoints löschen
-    if antwort==1
+    % Start fresh, so delete checkpoints
+    if response == 1
         if isfolder('myCheckpoints')
             delete(fullfile('myCheckpoints','*.mat')); 
         end
-        fprintf('Checkpoints gelöscht. Training neu.\n');
+        fprintf('Checkpoints deleted. Starting fresh.\n');
     else
-        fprintf('Weitermachen...\n');
+        fprintf('Continuing...\n');
     end
 
-    % Bilder zum Training laden
-    imds_alle = imageDatastore('MESS\training_data_pics',...
-        'IncludeSubfolders',true,...
-        'FileExtensions','.png',...
-        'LabelSource','none');
+    % Load images for training
+    imds_all = imageDatastore('MESS\training_data_pics',...
+        'IncludeSubfolders', true, ...
+        'FileExtensions', '.png', ...
+        'LabelSource', 'none');
 
-    anzGes = numel(imds_alle.Files);
-    if anzGes < 1
-        error('Keine Trainingsdaten gefunden!\n');
+    total_count = numel(imds_all.Files);
+    if total_count < 1
+        error('No training data found!\n');
     end
-    fprintf('Gefundene Bilder: %d\n', anzGes);
+    fprintf('Found images: %d\n', total_count);
 
-    % Temperatur aus Dateiname lesen
-    [temp, ok_index] = temp_daten_lesen(imds_alle);
+    % Read temperature from filename
+    [temp, valid_indices] = read_temp_data(imds_all);
 
-    ok_sum = sum(ok_index);
-    fprintf('Valide Trainingsdaten: %d\n', ok_sum);
+    valid_count = sum(valid_indices);
+    fprintf('Valid training data: %d\n', valid_count);
 
-    % nur gültige beibehalten
-    imds_alle.Files = imds_alle.Files(ok_index);
-    temp      = temp(ok_index);
+    % Keep only valid data
+    imds_all.Files = imds_all.Files(valid_indices);
+    temp = temp(valid_indices);
 
-    % Daten aufteilen 80/20 für schnellen check am Ende
-    ok_sum = numel(temp);
-    rng('shuffle'); % Zufallgenerator initalizieren
-    rand_index = randperm(ok_sum); % zufälligen index erstellen
-    trennpunkt = round(0.8 * ok_sum); % Trennpunkt zwischen training und validierungsdaten
+    % Split data 80/20 for quick validation at the end
+    valid_count = numel(temp);
+    rng('shuffle'); % Initialize random generator
+    rand_indices = randperm(valid_count); % Create random index
+    split_point = round(0.8 * valid_count); % Split point between training and validation data
 
-    % Trainings daten und validierungs daten trennen und vorher alles mischen
-    training_daten = imds_alle.Files(rand_index(1:trennpunkt));
-    validierung_daten = imds_alle.Files(rand_index(trennpunkt+1:end));
-    % Das selbe mit den temperaturen
-    training_temp = temp(rand_index(1:trennpunkt));
-    validierung_temp = temp(rand_index(trennpunkt+1:end));
+    % Split training and validation data and shuffle them beforehand
+    training_data = imds_all.Files(rand_indices(1:split_point));
+    validation_data = imds_all.Files(rand_indices(split_point+1:end));
+    % Do the same for temperatures
+    training_temp = temp(rand_indices(1:split_point));
+    validation_temp = temp(rand_indices(split_point+1:end));
 
-    % Trennen der Bilddaten
-    imds_training = imageDatastore(training_daten,'LabelSource','none');
-    imds_validierung = imageDatastore(validierung_daten, 'LabelSource','none');
+    % Separate image data
+    imds_training = imageDatastore(training_data, 'LabelSource', 'none');
+    imds_validation = imageDatastore(validation_data, 'LabelSource', 'none');
     
-    % Trennen der Temperaturen
+    % Separate temperatures
     ds_training = arrayDatastore(training_temp);
-    ds_validierung = arrayDatastore(validierung_temp);
+    ds_validation = arrayDatastore(validation_temp);
 
-    % Für das Trainingtool müssen datastores verbunden sein
-    neu_training_ds = combine(imds_training, ds_training);
-    neu_validierung_ds = combine(imds_validierung, ds_validierung);
+    % Datastores must be combined for the training tool
+    combined_training_ds = combine(imds_training, ds_training);
+    combined_validation_ds = combine(imds_validation, ds_validation);
 
-    % Datastore transformieren damit Trainingtool es versteht
-    final_training_ds = transform(neu_training_ds, @cell_format);
-    final_validierung_ds = transform(neu_validierung_ds, @cell_format);
+    % Transform datastore so that the training tool understands it
+    final_training_ds = transform(combined_training_ds, @cell_format);
+    final_validation_ds = transform(combined_validation_ds, @cell_format);
 
-    % ResNet-18 laden
-    netzwerk = resnet18;
-    layer_graph  = layerGraph(netzwerk);
+    % Load ResNet-18
+    network = resnet18;
+    layer_graph = layerGraph(network);
 
-    % Letzte Klassifikations-Layer entfernen (fc1000, prob, ClassificationLayer_predictions)
-    layer_graph  = removeLayers(layer_graph, {'fc1000','prob','ClassificationLayer_predictions'});
+    % Remove the last classification layers (fc1000, prob, ClassificationLayer_predictions)
+    layer_graph = removeLayers(layer_graph, {'fc1000', 'prob', 'ClassificationLayer_predictions'});
 
-    % Neue Layer:
-    % Ein "fully connected Layer" (ganz gewöhnlicher Layer) und 
-    % ein "regression Layer" (hat MSE als loss function) für den output
-    neue_layer = [fullyConnectedLayer(1,'Name','fcReg','WeightLearnRateFactor',10,'BiasLearnRateFactor',10), ...
-            regressionLayer('Name','regOut')];
-    layer_graph = addLayers(layer_graph,neue_layer);
+    % New layers:
+    % A "fully connected layer" (regular layer) and
+    % a "regression layer" (uses MSE as loss function) for the output
+    new_layers = [fullyConnectedLayer(1, 'Name', 'fcReg', 'WeightLearnRateFactor', 10, 'BiasLearnRateFactor', 10), ...
+                  regressionLayer('Name', 'regOut')];
+    layer_graph = addLayers(layer_graph, new_layers);
 
-    % An den letzten bisheriegen Layer anschließen, 
-    % hier pooling layer "pool5" anschließen
-    layer_graph = connectLayers(layer_graph,'pool5','fcReg');
+    % Connect to the last existing layer, 
+    % here connect to pooling layer "pool5"
+    layer_graph = connectLayers(layer_graph, 'pool5', 'fcReg');
 
-    % Checkpoint ordner bei bedarf erzeugen
-    checkpoint_ordner = 'myCheckpoints';
-    if ~exist(checkpoint_ordner,'dir')
-        mkdir(checkpoint_ordner);
+    % Create checkpoint folder if needed
+    checkpoint_folder = 'myCheckpoints';
+    if ~exist(checkpoint_folder, 'dir')
+        mkdir(checkpoint_folder);
     end
 
-    net_optionen = trainingOptions('sgdm',... % sgdm = statisische Methode fürs training 
-        'MiniBatchSize',16,... % Kleistes Trainingsset (für Gradient und loss und Gewichte aktualisieren)
-        'MaxEpochs',5,... % Anzahl epochen
-        'InitialLearnRate',1e-4,... % Lernrate
-        'Shuffle','every-epoch',... % Daten jede Epoche mischen
-        'Verbose',true,... % Gibt Fortschritt in Command Window aus
-        'VerboseFrequency',200,... % häufigkeit für Conmmand window outputs
-        'Plots','training-progress',... % Plots während training
-        'CheckpointPath',checkpoint_ordner,... % Wo checkpoints speichern
-        'CheckpointFrequency',1); % Wie oft checkpoints speichern
+    net_options = trainingOptions('sgdm',... % sgdm = stochastic gradient descent method for training
+        'MiniBatchSize', 16,... % Smallest training set (for gradient, loss, and weight updates)
+        'MaxEpochs', 5,... % Number of epochs
+        'InitialLearnRate', 1e-4,... % Learning rate
+        'Shuffle', 'every-epoch',... % Shuffle data every epoch
+        'Verbose', true,... % Display progress in Command Window
+        'VerboseFrequency', 200,... % Frequency of Command Window outputs
+        'Plots', 'training-progress',... % Plots during training
+        'CheckpointPath', checkpoint_folder,... % Where to save checkpoints
+        'CheckpointFrequency', 1); % How often to save checkpoints
 
-    % Gucken ob checkpoint vorhanden
-    checkpoint = finde_neusten_checkpoint(checkpoint_ordner);
-    if antwort==1 
-        checkpoint='';
+    % Check if a checkpoint exists
+    checkpoint = find_latest_checkpoint(checkpoint_folder);
+    if response == 1 
+        checkpoint = '';
     end
 
     if ~isempty(checkpoint)
-        fprintf(['Checkpoint gefunden: ', checkpoint]);
+        fprintf(['Checkpoint found: ', checkpoint]);
         try
-            % Wenn Checkpoint gefunden training fortsetzen
-            [trainedNet, infoNet] = resumeTraining(checkpoint, net_optionen);
+            % If checkpoint found, resume training
+            [trainedNet, infoNet] = resumeTraining(checkpoint, net_options);
         catch ex
-            fprintf(['Training fortsetzen fehlgeschlagen: ', ex.message]);
-            fprintf('Training neustarten.\n');
-            % Wenn fortsetzen nicht funktioniert neu trainieren
-            [trainedNet, infoNet] = trainNetwork(final_training_ds, layer_graph, net_optionen);
+            fprintf(['Failed to resume training: ', ex.message]);
+            fprintf('Restarting training.\n');
+            % If resuming fails, start training from scratch
+            [trainedNet, infoNet] = trainNetwork(final_training_ds, layer_graph, net_options);
         end
     else
-        % Wenn kein Checkpoint, training ohne checkpoint starten
-        fprintf('Training starten.\n');
-        [trainedNet, infoNet] = trainNetwork(final_training_ds, layer_graph, net_optionen);
+        % If no checkpoint, start training from scratch
+        fprintf('Starting training.\n');
+        [trainedNet, infoNet] = trainNetwork(final_training_ds, layer_graph, net_options);
     end
 
-    % Wenn training fertig, kurze Validierung
-    predict_temp = predict(trainedNet, final_validierung_ds);
-    MSE_validierung  = mean((predict_temp - validierung_temp).^2);
-    RMSE_validierung = sqrt(MSE_validierung);
-    fprintf('RMSE von Validierung: %.3f\n', RMSE_validierung);
+    % After training, perform a quick validation
+    predicted_temp = predict(trainedNet, final_validation_ds);
+    MSE_validation = mean((predicted_temp - validation_temp).^2);
+    RMSE_validation = sqrt(MSE_validation);
+    fprintf('Validation RMSE: %.3f\n', RMSE_validation);
 
-    % Netzwerk und wichtige Informationen speichern
-    save('trainedTemperatureModel.mat','trainedNet','infoNet','RMSE_validierung');
-    fprintf('Training beendet.\n');
+    % Save the network and important information
+    save('trainedTemperatureModel.mat', 'trainedNet', 'infoNet', 'RMSE_validation');
+    fprintf('Training finished.\n');
 end
 
-% Hilfsfunktionen
+% Helper functions
 
-function output = cell_format(daten)
-    % transform => {Bild, numeric} => {Input, Response}
-    output = {daten{1}, daten{2}};
+function output = cell_format(data)
+    % transform => {Image, numeric} => {Input, Response}
+    output = {data{1}, data{2}};
 end
 
-function datei = finde_neusten_checkpoint(checkpoint_ordner)
-    Dateien=dir(fullfile(checkpoint_ordner,'checkpoint_epoch_*.mat'));
-    if isempty(Dateien)
-        datei='';
+function file = find_latest_checkpoint(checkpoint_folder)
+    files = dir(fullfile(checkpoint_folder, 'checkpoint_epoch_*.mat'));
+    if isempty(files)
+        file = '';
         return;
     end
-    % Mit max das letzte Datum finden, Wert egal nur index ist wichtig
-    [~,index_neuster]=max([Dateien.datenum]);
-    datei=fullfile(checkpoint_ordner,Dateien(index_neuster).name);
+    % Find the latest date using max, only the index is important
+    [~, latest_index] = max([files.datenum]);
+    file = fullfile(checkpoint_folder, files(latest_index).name);
 end
 
-function [temp, ok_index] = temp_daten_lesen(imds)
-    % Liest aus Dateinamen die Temperatur: xx.yy, 
-    % indem wir den letzten Unterstrich suchen und den Rest als Zahl lesen.
-    Dateien = imds.Files;
-    n = numel(Dateien);
-    temp = nan(n,1);
-    ok_index = false(n,1);
+function [temp, valid_indices] = read_temp_data(imds)
+    % Reads the temperature from filenames: xx.yy,
+    % by searching for the last underscore and reading the rest as a number.
+    files = imds.Files;
+    n = numel(files);
+    temp = nan(n, 1);
+    valid_indices = false(n, 1);
 
-    % Einmal durch alle Dateien
-    for i=1:n
-        [~, Dateiname, ~] = fileparts(Dateien{i});
+    % Iterate through all files
+    for i = 1:n
+        [~, filename, ~] = fileparts(files{i});
         
-        % Falls "_aug#" vorhanden, weg damit weil am Ende:
-        Dateiname = regexprep(Dateiname,'_aug\d+$','');
+        % If "_aug#" exists, remove it because it's at the end:
+        filename = regexprep(filename, '_aug\d+$', '');
 
-        % Letzter Unterstrich ist temperatur
-        index_us = strfind(Dateiname, '_');
-        if isempty(index_us)
+        % Last underscore indicates temperature
+        us_index = strfind(filename, '_');
+        if isempty(us_index)
             continue; 
         end
-        index_letzter_us = index_us(end);
+        last_us_index = us_index(end);
 
-        % Zu temperatur umwandeln
-        temp_str = Dateiname(index_letzter_us+1:end);
-        temp_temp= str2double(temp_str);
+        % Convert to temperature
+        temp_str = filename(last_us_index + 1:end);
+        temp_temp = str2double(temp_str);
 
-        % Merken ob umwandeln ok war
+        % Record whether conversion was successful
         if ~isnan(temp_temp)
             temp(i) = temp_temp;
-            ok_index(i) = true;
+            valid_indices(i) = true;
         end
     end
 end

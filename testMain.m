@@ -1,36 +1,36 @@
-function testMain (auto)
-% Hauptprogramm für den Test nach dem Trainieren
-% Neue Daten einladen und dann mit vorhersage vergleichen
+function testMain(auto)
+% Main program for testing after training
+% Load new data and then compare with predictions
 
 clc;
-fprintf('Test gestartet.');
-modus ='testing';
+fprintf('Test started.');
+mode = 'testing';
 
-% Auch hier kann mit auto = 1, alle eingeben übersprungen werden
-% Dann wird alles gelöscht und neu gemacht, sonst kann man wählen.
+% Here too, if auto = 1, all prompts are skipped
+% Then everything will be deleted and redone, otherwise you can choose.
 if auto == 1
     choice = auto;
 else
-    choice = input('Alles neu (1) oder fortsetzen (0)? ');
+    choice = input('Start fresh (1) or continue (0)? ');
 end
 
 if isempty(choice)
-    choice=0;
+    choice = 0;
 end
 
-% Wenn choice = 1 werden alle Testdaten gelöscht
-if choice==1
-    fprintf('Lösche alte Testdaten...');
-    vernichten(fullfile('MESS','testing_data_pics'));
+% If choice = 1, all test data will be deleted
+if choice == 1
+    fprintf('Deleting old test data...');
+    destroy(fullfile('MESS', 'testing_data_pics'));
 else
-    fprintf('Test fortsetzen...');
+    fprintf('Continuing test...');
 end
 
-% Testvideo zu Bildern machen und Temperaturen dazu
-videoNadelErzeugen(modus)
+% Convert test video into images and associate temperatures
+videoNadelErzeugen(mode)
 
-% Neue Daten mit dem trainierten Netzwerk ausprobieren
-testVorhersage;
+% Try new data with the trained network
+testPrediction;
 
-fprintf('Test beendet.');
+fprintf('Test ended.');
 end

@@ -1,104 +1,104 @@
 function nadelAugmentieren
-% Erweitert Trainingsdaten durch Augmentieren
+% Expands training data by augmenting
 
 clc;
-fprintf('Daten augmentieren ...\n');
+fprintf('Augmenting data ...\n');
 
-%  Alle Bilder für training suchen und Datastore erzeugen
-ordner = fullfile('MESS\training_data_pics');
-imds = imageDatastore(ordner, 'IncludeSubfolders',true,...
+% Search for all images for training and create a datastore
+folder = fullfile('MESS\training_data_pics');
+imds = imageDatastore(folder, 'IncludeSubfolders',true,...
     'FileExtensions','.png', 'LabelSource','none');
 
-% Anzahl Trainingsdaten ohne Augmentierung
-anzahl = numel(imds.Files);
-fprintf(['Gefundene Bilder im training Ordner: ', num2str(anzahl),'\n']);
-if anzahl<1
-    fprintf('Keine Bilder! Abbruch.\n');
+% Number of training data without augmentation
+count = numel(imds.Files);
+fprintf(['Images found in the training folder: ', num2str(count),'\n']);
+if count < 1
+    fprintf('No images found! Aborting.\n');
     return;
 end
 
-% Ordner für neue Bilder
-aug_ordner = fullfile('MESS\training_data_pics','NadelAugData');
-if ~exist(aug_ordner,'dir')
-    mkdir(aug_ordner);
+% Folder for new images
+aug_folder = fullfile('MESS\training_data_pics','NadelAugData');
+if ~exist(aug_folder,'dir')
+    mkdir(aug_folder);
 end
 
-anz_pro_aug = 3; % 3 Bilder pro original hinzu
+images_per_aug = 3; % 3 augmented images per original
 i_original = 0;
-i_aug  = 0;
+i_aug = 0;
 
 reset(imds); 
-% Durch alle Bilder gehen
+% Iterate through all images
 while hasdata(imds)
-    % Bild und Infos zum Bild aus Datastore laden
+    % Load image and image information from datastore
     [original, infos] = read(imds);
-    [~, Dateiname, Dateiendung] = fileparts(infos.Filename);
+    [~, FileName, FileExtension] = fileparts(infos.Filename);
 
-    % Prüfen, ob für dieses Bild schon augmentierte Versionen existieren
-    fertig_aug = dir(fullfile(aug_ordner, [Dateiname,'_aug*', Dateiendung]));
-    anz_fertig_aug  = numel(fertig_aug);
-    if anz_fertig_aug >= anz_pro_aug
+    % Check if augmented versions already exist for this image
+    finished_aug = dir(fullfile(aug_folder, [FileName,'_aug*', FileExtension]));
+    num_finished_aug  = numel(finished_aug);
+    if num_finished_aug >= images_per_aug
         i_original = i_original + 1;
         continue;
     end
 
-    % Falls noch welche für das Bild fehlen erzeuge mehr
-    for a = (anz_fertig_aug+1) : anz_pro_aug
-        aug_Bild = zufall_aug(original);
-        aug_Name= sprintf('%s_aug%d%s', Dateiname, a, Dateiendung);
-        % => Bsp: "nadelFrame00001_35.20_aug1.png"
-        imwrite(aug_Bild, fullfile(aug_ordner, aug_Name));
-        i_aug = i_aug+1;
+    % If more augmented images are needed, generate them
+    for a = (num_finished_aug + 1) : images_per_aug
+        aug_Image = random_augmentation(original);
+        aug_Name = sprintf('%s_aug%d%s', FileName, a, FileExtension);
+        % => Example: "nadelFrame00001_35.20_aug1.png"
+        imwrite(aug_Image, fullfile(aug_folder, aug_Name));
+        i_aug = i_aug + 1;
     end
 
-    i_original = i_original+1;
-    % Fortschritt ausrechnen und anzeigen
-    prozent=(i_original/anzahl)*100;
-    fprintf('Original: %d/%d (%.1f%%)\n',i_original, anzahl, prozent);
+    i_original = i_original + 1;
+    % Calculate and display progress
+    percent = (i_original / count) * 100;
+    fprintf('Original: %d/%d (%.1f%%)\n', i_original, count, percent);
 end
 
-fprintf('Fertig mit Augmentieren!\n');
-fprintf(['Erzeugte Aug-Bilder: ', num2str(i_aug),'\n']);
+fprintf('Done augmenting!\n');
+fprintf(['Generated augmented images: ', num2str(i_aug),'\n']);
 end
 
 
-function aug_Bild = zufall_aug(inBild)
-% Erzeugt ein einziges Augmentiertes Bild:
+function aug_Image = random_augmentation(inputImage)
+% Generates a single augmented image:
 
-% 1) Zufällige Rotation +/-15°
-winkel=randi([-15,15],1);
-aug_Bild=imrotate(inBild,winkel,'bicubic','crop');
+% 1) Random rotation +/-15°
+angle = randi([-15,15],1);
+aug_Image = imrotate(inputImage, angle, 'bicubic', 'crop');
 
-% 2) Zufällig Spiegeln um verschiedene Achsen
-if rand<0.5
-    aug_Bild=flip(aug_Bild,2);
+% 2) Randomly flip along different axes
+if rand < 0.5
+    aug_Image = flip(aug_Image, 2);
 end
-if rand<0.3
-    aug_Bild=flip(aug_Bild,1);
-end
-
-% 3) Zufällig Skalieren zwischen 0.9..1.1
-skala=0.9+0.2*rand;
-aug_Bild=imresize(aug_Bild,skala);
-[H,B,~]=size(aug_Bild);
-
-if H<224 || B<224 % Bild zu klein, Seiten auffüllen
-    padH=224-H; padB=224-B;
-    t= floor(padH/2);
-    l= floor(padB/2);
-    aug_Bild=padarray(aug_Bild,[t l],'replicate','pre'); 
-    aug_Bild=padarray(aug_Bild,[padH-t, padB-l],'replicate','post'); 
-else % Bild zu groß, Seiten zuschneiden
-    erste_zeile=floor((H-224)/2)+1;
-    erste_spalte=floor((B-224)/2)+1;
-    aug_Bild=imcrop(aug_Bild,[erste_spalte erste_zeile 223 223]);
+if rand < 0.3
+    aug_Image = flip(aug_Image, 1);
 end
 
-% 4) Zufällig Helligkeit +/-10%
-aug_Bild=im2double(aug_Bild);
-helligkeit=1+0.2*(rand-0.5);
-aug_Bild=aug_Bild*helligkeit;
-aug_Bild=mat2gray(aug_Bild);
-% Bild mit 0 bis 255 Graustufen
-aug_Bild=im2uint8(aug_Bild);
+% 3) Randomly scale between 0.9 and 1.1
+scale = 0.9 + 0.2 * rand;
+aug_Image = imresize(aug_Image, scale);
+[H, W, ~] = size(aug_Image);
+
+if H < 224 || W < 224 % Image too small, pad sides
+    padH = 224 - H; padW = 224 - W;
+    t = floor(padH / 2);
+    l = floor(padW / 2);
+    aug_Image = padarray(aug_Image, [t l], 'replicate', 'pre'); 
+    aug_Image = padarray(aug_Image, [padH - t, padW - l], 'replicate', 'post'); 
+else % Image too large, crop sides
+    first_row = floor((H - 224) / 2) + 1;
+    first_col = floor((W - 224) / 2) + 1;
+    aug_Image = imcrop(aug_Image, [first_col first_row 223 223]);
+end
+
+% 4) Random brightness adjustment +/-10%
+aug_Image = im2double(aug_Image);
+brightness = 1 + 0.2 * (rand - 0.5);
+aug_Image = aug_Image * brightness;
+aug_Image = mat2gray(aug_Image);
+% Image with 0 to 255 grayscale
+aug_Image = im2uint8(aug_Image);
 end

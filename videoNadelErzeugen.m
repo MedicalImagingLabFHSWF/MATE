@@ -1,373 +1,240 @@
-function videoNadelErzeugen(modus)
-% 1) Liest Datensätze ein
-% 2) Schneidet und Bearbeitet die Frames fuer das Resnet18 vor. 
+function videoNadelErzeugen(mode)
+% 1) Reads datasets
+% 2) Cuts and preprocesses frames for ResNet18.
 
 clc;
-fprintf('Schneide Frames zu...\n');
+fprintf('Cutting frames...\n');
 
-info = datenEinlesen(modus);
+info = datenEinlesen(mode);
 if isempty(info)
-
-    fprintf('Fehler: Keine Datensätze\n');
+    fprintf('Error: No datasets found\n');
     return;
 end
 
-for i = 1:size(info,1)
+for i = 1:size(info, 1)
 
-    % Dateiname
-    name     = info{i,5};
-    % Kompletter Pfad zur MP4 Datei
-    mp4Pfad  = info{i,6};
-    % Kompletter Pfad zur CSV Datei
-    tabPfad  = info{i,7};
-    % Startzeit
-    anfSec = info{i,3};
-    % Endzeit
-    endSec   = info{i,4};
+    % File name
+    name = info{i, 5};
+    % Full path to the MP4 file
+    mp4Path = info{i, 6};
+    % Full path to the CSV file
+    tablePath = info{i, 7};
+    % Start time
+    startSec = info{i, 3};
+    % End time
+    endSec = info{i, 4};
 
-    % Ausgabe des aktuellen Datensatzes 
-    fprintf('%s Datensatz #%d: %s \n',modus, i , name);
+    % Output the current dataset
+    fprintf('%s Dataset #%d: %s \n', mode, i, name);
 
-    % Falls die tabelle nicht existiert wird der Durchlauf übersprungen
-    if ~isfile(tabPfad)
-        fprintf('Fehler: Tabelle fehlt %s \n',tabPfad);
+    % Skip this iteration if the table does not exist
+    if ~isfile(tablePath)
+        fprintf('Error: Table missing %s \n', tablePath);
         continue;
     end
 
-    % Auslesen der Tabelle
-    tab = readtable(tabPfad);
+    % Read the table
+    tab = readtable(tablePath);
 
-    % Durch den Messaufbau ergeben sich immer 4 Spalten, damit kann ich 
-    % überprüfen ob die richtige Datei eingelesen wurde
-    if size(tab,2)<4
-        fprintf('Zu wenige Spalten, überspringe \n');
+    % Ensure the table has 4 columns due to the measurement setup
+    % This checks if the correct file was read
+    if size(tab, 2) < 4
+        fprintf('Too few columns, skipping \n');
         continue;
     end
 
-    % Zeit umwandlen in sekunden. Falls CSV/Excel andere Werte hat (z.B.
-    % Datum, statt Sec)
-
-    % tsec speichert die Zeitwerte, ok ist ein rückgabewert der Angibt ob
-    % ein Fehler vorliegt
-    [tsec, ok] = umwandeln_zu_sek(tab{:,1});
+    % Convert time to seconds. If the CSV/Excel has other values (e.g., date instead of seconds)
+    % tsec stores time values, ok is a return value indicating whether an error occurred
+    [tsec, ok] = convert_to_seconds(tab{:, 1});
     if ~ok
-        fprintf('Fehler: Zeit nicht lesbar \n');
+        fprintf('Error: Time not readable \n');
         continue;
     end
 
-    % Abspeichern von Spalte 2 und 3 in Variable, ggf. convertierung in
-    % zahlen
-    A = toNum(tab{:,2});
-    B = toNum(tab{:,3});
+    % Save columns 2 and 3 in variables, with possible conversion to numbers
+    A = toNum(tab{:, 2});
+    B = toNum(tab{:, 3});
 
-    % Summen der Spalten werden gebildet, die mit dem Höchsten Wert ist die
-    % bessere Messung und wird weiter verwendet
-    % omitnan ignoriert nicht auswertbare Werte
-
-    if sum(A,'omitnan') >= sum(B,'omitnan')
+    % Sum the columns, the one with the highest value is the better measurement and is used
+    % omitnan ignores non-evaluable values
+    if sum(A, 'omitnan') >= sum(B, 'omitnan')
         temp = A;
-    else 
+    else
         temp = B;
     end
 
-    if ~isfile(mp4Pfad)
-        fprintf('Fehler: MP4 %s Fehlt \n',mp4Pfad);
+    if ~isfile(mp4Path)
+        fprintf('Error: MP4 %s Missing \n', mp4Path);
         continue;
     end
 
-    % Zeit des Videos extrahieren und den richtigen endpunkt bestimmen
-    video = VideoReader(mp4Pfad);
-    zeit = video.Duration;
-    endzeit = zeit - endSec;
+    % Extract video duration and determine the correct endpoint
+    video = VideoReader(mp4Path);
+    duration = video.Duration;
+    endtime = duration - endSec;
 
-   % Startzeit definieren
-   % überprüfe ob sie startzeit unter 0 sec sind, wenn ja wird nichts
-   % geschnitten
-   if anfSec < 0
-       anfSec = 0;
-   end
+    % Define start time
+    % Check if the start time is less than 0 seconds; if yes, no cutting is done
+    if startSec < 0
+        startSec = 0;
+    end
 
-   % Überprüfen ob die anfganszeit größer ist als die Endzeit, wenn ja
-   % Fehler ausgabe
-   if endzeit <= anfSec
-       fprinft('Fehler: Videozeit \n');
-       continue;
-   end
+    % Check if the start time is greater than the end time; if yes, output an error
+    if endtime <= startSec
+        fprintf('Error: Video time \n');
+        continue;
+    end
 
-    % Festlegen der Framerate, hier wird nur jeder vierte Frame verwendet
-    % reduzierung des Rechenaufwands
+    % Specify frame rate; only every fourth frame is used
+    % Reduces computational effort
     rate = 4;
-    framerate = video.FrameRate/rate;
+    framerate = video.FrameRate / rate;
 
+    % Calculate actual video time
+    newtime = endtime - startSec;
+    % Generate a vector with times at which frames are extracted from the video
+    zvideo = 0 : 1 / framerate : newtime;
 
-    %berrechnung der eigentlichen video zeit
-    neuezeit = endzeit - anfSec;
-    % erzeugen von vektor mit Zeitpunkten an dene die Frames aus dem Video
-    % extrahiert werden
-    zvideo = 0 : 1/framerate : neuezeit;
+    % Set threshold in seconds to detect jumps in the timestamp
+    threshold = 5;
 
-    % Der schwellenwert in secunden wird hier festgelegt, wodurch man
-    % erkennen kann ob ein sprung im zeitstempel vorliegt
-    schwellenwert = 5;
+    % First timestamp
+    first_t = tsec(1);
 
-    % erster Zeitstempel
-    erst_t = tsec(1);
+    % Index
+    restart = 1;
 
-    % index 
-    neustart = 1;
-
-    % Schleife über tsec ( Zeitwerte )
+    % Loop over tsec (time values)
     for ii = 1:numel(tsec)
-        % Falls der  die Differenz zwischen startzeit und aktuell
-        % ausgelsenen Zeitstempel, größer als der Schwellenwert liegt
-        % (hier 5 sec) wird der index ii zurück gesetzt und die Schleife
-        % beendet. Damit kann man Sprünge finden. Das wurde eingebaut, weil
-        % bei der Messung mit dem Temperaturmessgerät alles eingestellt
-        % wurde und später gestartet wurde. Damit wird der berreich
-        % ignoriert.
-        if tsec(ii)-erst_t > schwellenwert
-            neustart = ii;
-            break
+        % If the difference between start time and the current timestamp
+        % exceeds the threshold (here 5 seconds), reset the index ii and exit the loop.
+        % This helps detect skips. This was added because during measurement,
+        % the temperature device was set up and started later. These sections are ignored.
+        if tsec(ii) - first_t > threshold
+            restart = ii;
+            break;
         else
-            % Andernfalls wird erst_t mit dem neuen Zeitwert übergeben
-            erst_t = tsec(ii);
+            % Otherwise, update first_t with the new time value
+            first_t = tsec(ii);
         end
     end
 
-    % Zuschneiden des Neuen Startpunktes
-    tsec = tsec(neustart:end);
-    % Nomierung, neue Anfang fängt bei 0 an
+    % Cut the new start point
+    tsec = tsec(restart:end);
+    % Normalize, new start begins at 0
     tsec = tsec - tsec(1);
 
-    %unique entfernt doppelte zeitstempel, stable  behält die reihenfolge
-    %bei, beinhaltet die eindeutigen zeitwerte und i_alle sind die
-    %zugehörogen indizes
-    [u,i_alle] = unique(tsec, 'stable');
-    % durch die Indezierung erhält man die eindeutigen zeitstempel einen
-    % zugehörigen Temparturwert in zuordnen
-    zuordnen = temp(i_alle);
+    % Remove duplicate timestamps; stable retains order
+    % u contains unique time values, and i_all contains the corresponding indices
+    [u, i_all] = unique(tsec, 'stable');
+    % Using the indices, assign a unique temperature value to each timestamp
+    assign = temp(i_all);
 
-    % Interpolation der Temperaturwerte
+    % Interpolate temperature values
+    % Perform linear interpolation, if needed, between temperature values for each
+    % timestamp in zvideo. u are the known timestamps, zvideo is the vector of timestamps
+    % where video frames are extracted.
+    vall = interp1(u, assign, zvideo, 'linear', 'extrap');
+    % Index for later loops
+    totalFrames = numel(zvideo);
 
-    %lineare Interpolation falls nötig, zwischen Temperaturwerten zu jeden
-    %Zeitpunkt von zvideo. u sind die bekannten Zeitpunkte nachzuscheniden,
-    %zvideo ist der Vektor der Zeitpunkte, an denen die Video Frames
-    %extrahiert werden.
-    vall = interp1(u,zuordnen,zvideo,'linear','extrap');
-    %index für spätere Schleifen
-    anzFrames = numel(zvideo);
-
-
-    % Fallunterscheidung ob das Script fürs training oder fürs testen
-    % aufgerufen wird. Damit werden die Frames jeweils woanders
-    % abgespeichert
-    if strcmpi(modus,'training')
+    % Check whether the script is called for training or testing.
+    % Frames are saved in different locations accordingly
+    if strcmpi(mode, 'training')
         tempFolder = 'MESS\training_data_pics';
-    elseif strcmpi(modus,'testing')
+    elseif strcmpi(mode, 'testing')
         tempFolder = 'Mess\testing_data_pics';
     end
 
-    % z.B. "training-NadelData_1_10W_12_5" baut den namen des Unterordners 
-    ordner = fullfile(tempFolder,[modus,'-NadelData_',name]);
+    % For example, "training-NadelData_1_10W_12_5" constructs the subfolder name
+    folder = fullfile(tempFolder, [mode, '-NadelData_', name]);
 
-    % Schaut ob der ordner schon existiert und erstellt ihn falls nicht
-    % vorhanden
-    if ~exist(ordner,'dir')
-        mkdir(ordner);
-
+    % Check if the folder already exists; if not, create it
+    if ~exist(folder, 'dir')
+        mkdir(folder);
     end
 
-    % Sucht in ordner nach png die "nadelFrame" heißen 
-    existierendePNG = dir(fullfile(ordner,'nadelFrame*.png'));
-    % Anzahl der gefunden PNGS
-    fstart = numel(existierendePNG);
-    
-    % Schauen ob die anzahl der frames größer oder gleich der gefunden PNGs
-    % ist. Falls ja dann springt er weiter zur nächsten codeabschnitt 
-    if fstart >= anzFrames
-        fprintf('fertig');
+    % Search in the folder for PNG files named "nadelFrame"
+    existingPNG = dir(fullfile(folder, 'nadelFrame*.png'));
+    % Number of found PNGs
+    startFrames = numel(existingPNG);
+
+    % Check if the number of frames is greater than or equal to the found PNGs
+    % If yes, skip to the next code section
+    if startFrames >= totalFrames
+        fprintf('Done');
         continue;
     end
 
-    % Vorspulen des Videos, um bearbeite Frames zu überspringen
-    % Anfangszeit 
-    video.CurrentTime = anfSec;
-    %index
-    springe = 0;
-    % Solange Frames vorhanden sind wird die Schleife weiter vortgeführt 
-    while hasFrame(video) && springe < fstart
+    % Skip ahead in the video to skip processed frames
+    % Start time
+    video.CurrentTime = startSec;
+    % Index
+    skip = 0;
+    % Continue the loop as long as there are frames
+    while hasFrame(video) && skip < startFrames
         for s = 1:rate-1
             readFrame(video);
         end
-        %index erhöhen
-        springe = springe + 1;
+        % Increment index
+        skip = skip + 1;
     end
 
-    %berrechnen der gesammten Frames 
-    bearbeiteFrames = floor((endzeit-anfSec)*video.FrameRate)/rate;
-    % index
-    f = fstart;
+    % Calculate total frames
+    processedFrames = floor((endtime - startSec) * video.FrameRate) / rate;
+    % Index
+    f = startFrames;
 
-    % Auselen von Frames
-    % Schleife, läuft so lange bis es keine Frames mehr gibt oder endzeit
-    % erreicht wurde
-    while hasFrame(video) && video.CurrentTime <=  endzeit
-        % liest und verwirrt Frames 
+    % Extract frames
+    % Loop continues until no more frames are available or end time is reached
+    while hasFrame(video) && video.CurrentTime <= endtime
+        % Read and skip frames
         for s = 1:rate-1
             readFrame(video);
         end
-        %Frame auslesen
+        % Read frame
         frame = readFrame(video);
-        %index erhöhen
+        % Increment index
         f = f + 1;
-        % zuordnen des Temperatur wertes
-        iii = min(f, anzFrames);
-        % Entnahme des interpolierten Wertes aus Vall
-        interpoliert_temp = vall(iii);
-        
-        % Falls man nur den berreich 0-90 °C benötigt, schnellere
-        % Rechenzeit
+        % Assign temperature value
+        iii = min(f, totalFrames);
+        % Extract interpolated value from vall
+        interpolated_temp = vall(iii);
 
-        % if interpoliert_temp > 90
-        %     fprintf('Temperatur über 90°C: restliche Frames ignoriert, nächstes Video.');
+        % If only the range 0-90°C is needed, faster computation
+        % Uncomment below for that:
+        % if interpolated_temp > 90
+        %     fprintf('Temperature above 90°C: remaining frames ignored, next video.');
         %     break;
         % end
 
-       % Helligkeitsschwelle zum wegschneiden der schwarzen Ränder
-       helligkeit = 20;
-       % Entferne schwarze Ränder vom Bild
-       frameohnerand = entferne_rand(frame, helligkeit);
+        % Brightness threshold to remove black borders
+        brightness = 20;
+        % Remove black borders from the image
+        frameWithoutBorders = remove_borders(frame, brightness);
 
+        % Further crop the image (in percentages)
+        top = 0.00;
+        bottom = 0.20;
+        left = 0.00;
+        right = 0.00;
+        % Apply cropping
+        cropped = crop_image(frameWithoutBorders, top, bottom, left, right);
 
-       % Danach noch zuschneiden (in Prozent)
-       oben    = 0.00;
-       unten   = 0.20;
-       links   = 0.00;
-       rechts  = 0.00;
-       %zuschneiden
-       zugeschnitten = zuschneiden(frameohnerand, oben, unten, links, rechts);
+        % Change image format so the AI can read it
+        finalImage = imresize(cropped, [224 224]);
 
-       % Bild format ändern damit die KI es lesen kann
-       fertiges_Bild = imresize(zugeschnitten, [224 224]);
+        % Construct filename and save image
+        filename = sprintf('nadelFrame%05d_%.2f.png', f, interpolated_temp);
+        imwrite(finalImage, fullfile(folder, filename));
 
-       % Dateiname zusammenstellen und Bild speichern
-       Dateiname = sprintf('nadelFrame%05d_%.2f.png', f, interpoliert_temp);
-       imwrite(fertiges_Bild, fullfile(ordner, Dateiname));
-        
-       % Fortschritt ab und zu ausgeben
-       if mod(f,30)==0 || f==bearbeiteFrames
-                prozent = (f / bearbeiteFrames)*100;
-                fprintf('Fortschritt: %d/%d (%.1f%%)\n', f, bearbeiteFrames, prozent);
+        % Occasionally output progress
+        if mod(f, 30) == 0 || f == processedFrames
+            percent = (f / processedFrames) * 100;
+            fprintf('Progress: %d/%d (%.1f%%)\n', f, processedFrames, percent);
         end
     end
 end
 
-fprintf(['Fertig: ', modus,'-videoNadelErzeugen']);
-end
-
-% Hilfsfunktionen
-
-% Wandelt gängige Zeitformate in Sekunden um
-function [sek, ok] = umwandeln_zu_sek(Zeit)
-    sek=[]; ok=false;
-
-    % Schon eine Zahl, dann ist schon Zeit in Sekunden
-    if isnumeric(Zeit)
-        sek=Zeit; 
-        ok=true; 
-        return;
-    end
-
-    % Ist datetime typ, dann zu relativer Zeit machen
-    % danach zu Sekunden machen
-    if isdatetime(Zeit)
-        sek=seconds(Zeit - Zeit(1));
-        ok=true; 
-        return;
-    end
-
-    % Versuchen Eingangswert zu einem Datum umzuwandeln,
-    % Probiere ein paar typische Datumformate
-    fm = ["dd.MM.yyyy HH:mm:ss.SSS","dd.MM.yyyy HH:mm:ss"];
-    for k=1:numel(fm)
-        try
-            % Versuche umzuwandeln und zum nächsten wenn es nicht geht
-            d = datetime(Zeit,'InputFormat',fm(k));
-            % Falls es geklappt hat zu relativer Zeit machen und in sek
-            % umwandeln
-            sek = seconds(d - d(1));
-            ok=true; 
-            return;
-        catch
-        end
-    end
-end
- 
-% Eingang zu Zahl machen wenn noch nicht Zahl
-function v = toNum(x)
-    % Schon Zahl, Eingang = Ausgang
-    if isnumeric(x)
-        v = x;
-    else
-        % Zu Zahl konvertieren und zurückgeben
-        v = str2double(string(x));
-    end
-end
-
-% Entfernt schwarzen Rand vom Bild.
-% Ignoriert kleine Symbole durch Schwelle
-function frameohnerand = entferne_rand(inBild, schwelle)
-    % Bild zu Grau machen fall noch nicht ist
-    if ndims(inBild) == 3
-        g = rgb2gray(inBild);
-    else
-        g = inBild;
-    end
-
-
-    reihe_mittel = mean(g,2);
-    spalte_mittel = mean(g,1);
-
-    % Suchen nach dem Rand
-    % Wenn Mittel einer Reihe/Spalte Schwelle erreicht
-    oben   = find(reihe_mittel >= schwelle, 1, 'first');
-    unten  = find(reihe_mittel >= schwelle, 1, 'last');
-    links  = find(spalte_mittel >= schwelle, 1, 'first');
-    rechts = find(spalte_mittel >= schwelle, 1, 'last');
-
-    % Ein Rand wurde nicht gefunden
-    % Bild wieder zurück wie es war
-    if isempty(oben) || isempty(unten) || isempty(links) || isempty(rechts)
-        frameohnerand = inBild;
-        return;
-    end
-
-    % Bild zuschneiden an den gefundenen Rändern
-    frameohnerand = inBild(oben:unten, links:rechts, :);
-end
-
-function zugeschnitten = zuschneiden(inBild, oben, unten, links, rechts)
-    [H,B,~] = size(inBild);
-
-    % Prozente zu Pixel umrechnen
-    obenPx    = round(H * oben);
-    untenPx = round(H * unten);
-    linksPx   = round(B * links);
-    rechtsPx  = round(B * rechts);
-
-    % Neue Ränder aus Pixeln berechnen
-    Reihe_Start = 1 + obenPx;
-    Reihe_Ende   = H - untenPx;
-    Spalte_Start = 1 + linksPx;
-    Spalte_Ende   = B - rechtsPx;
-    
-    % Falls komisch zugeschnitten werden soll, ursprüngliches Bild zurück
-    if Reihe_Start > Reihe_Ende || Spalte_Start > Spalte_Ende
-        fprintf('Ungültige Parameter! Original zurückgegeben.');
-        zugeschnitten = inBild;
-        return;
-    end
-    
-    % Bild zuschneiden
-    zugeschnitten = inBild(Reihe_Start:Reihe_Ende, Spalte_Start:Spalte_Ende, :);
+fprintf(['Done: ', mode, '-videoNadelErzeugen']);
 end

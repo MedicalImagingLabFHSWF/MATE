@@ -19,7 +19,7 @@ In MWA, precise temperature monitoring is critical to ensure effective coagulati
 ## 🧠 Technologies Used
 
 - MATLAB (Deep Learning Toolbox)
-- ResNet50 (ImageNet pretrained)
+- ResNet18 (ImageNet pretrained)
 - Ultrasound video data @ 30 fps
 
 ## 📈 Status
